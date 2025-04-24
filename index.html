@@ -43,7 +43,6 @@
             margin-top: 20px;
             padding: 10px;
             border-radius: 4px;
-            display: none;
         }
         .success {
             background-color: #dff0d8;
@@ -53,6 +52,22 @@
             background-color: #f2dede;
             color: #a94442;
         }
+        .progress-container {
+            width: 100%;
+            background-color: #f1f1f1;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #4CAF50;
+            border-radius: 4px;
+            width: 0%;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -60,62 +75,114 @@
     <p>Click any button below to generate and download a file with random data of the specified size.</p>
 
     <div class="buttons">
-        <button onclick="generateRandomFile(1)">Generate 1MB Random File</button>
-        <button onclick="generateRandomFile(10)">Generate 10MB Random File</button>
-        <button onclick="generateRandomFile(25)">Generate 25MB Random File</button>
-        <button onclick="generateRandomFile(50)">Generate 50MB Random File</button>
-        <button onclick="generateRandomFile(100)">Generate 100MB Random File</button>
+        <button onclick="startGeneration(1)">Generate 1MB Random File</button>
+        <button onclick="startGeneration(10)">Generate 10MB Random File</button>
+        <button onclick="startGeneration(25)">Generate 25MB Random File</button>
+        <button onclick="startGeneration(50)">Generate 50MB Random File</button>
+        <button onclick="startGeneration(100)">Generate 100MB Random File</button>
     </div>
 
-    <div id="status" class="status"></div>
+    <div id="status" class="status" style="display: none;"></div>
+    <div id="progress-container" class="progress-container">
+        <div id="progress-bar" class="progress-bar">0%</div>
+    </div>
 
     <script>
-        function generateRandomFile(mbSize) {
+        function startGeneration(mbSize) {
             const statusElement = document.getElementById('status');
-            statusElement.style.display = 'block';
-            statusElement.textContent = `Generating ${mbSize}MB random file...`;
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            
+            // Update UI
+            statusElement.textContent = `Preparing to generate ${mbSize}MB random file...`;
             statusElement.className = 'status';
+            statusElement.style.display = 'block';
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
             
             // Disable all buttons while generating
             const buttons = document.querySelectorAll('button');
             buttons.forEach(button => button.disabled = true);
             
+            // Start the generation process
             setTimeout(() => {
-                try {
-                    // Generate random data
-                    const byteSize = mbSize * 1024 * 1024; // Convert MB to bytes
-                    const buffer = new Uint8Array(byteSize);
+                generateRandomFileInChunks(mbSize);
+            }, 100);
+        }
+        
+        function generateRandomFileInChunks(mbSize) {
+            const statusElement = document.getElementById('status');
+            const progressBar = document.getElementById('progress-bar');
+            const buttons = document.querySelectorAll('button');
+            
+            try {
+                const totalBytes = mbSize * 1024 * 1024;
+                const chunkSize = 65536; // Max size for crypto.getRandomValues() is 65536 bytes
+                const chunks = Math.ceil(totalBytes / chunkSize);
+                let processedChunks = 0;
+                
+                // Create an array to hold all chunks
+                const allChunks = [];
+                
+                function processNextChunk() {
+                    if (processedChunks >= chunks) {
+                        // All chunks processed, combine and download
+                        const blob = new Blob(allChunks, { type: 'application/octet-stream' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${mbSize}mb.bin`;
+                        a.style.display = 'none';
+                        document.body.appendChild(a);
+                        a.click();
+                        
+                        // Clean up
+                        window.setTimeout(() => {
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }, 100);
+                        
+                        statusElement.textContent = `${mbSize}MB file successfully generated and download started!`;
+                        statusElement.className = 'status success';
+                        
+                        // Re-enable all buttons
+                        buttons.forEach(button => button.disabled = false);
+                        return;
+                    }
                     
-                    // Fill buffer with random values
+                    // Calculate size of this chunk (might be smaller for the last chunk)
+                    const remainingBytes = totalBytes - (processedChunks * chunkSize);
+                    const currentChunkSize = Math.min(chunkSize, remainingBytes);
+                    
+                    // Generate chunk of random data
+                    const buffer = new Uint8Array(currentChunkSize);
                     window.crypto.getRandomValues(buffer);
+                    allChunks.push(buffer);
                     
-                    // Create blob and download
-                    const blob = new Blob([buffer], { type: 'application/octet-stream' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${mbSize}mb.bin`;
-                    a.style.display = 'none';
-                    document.body.appendChild(a);
-                    a.click();
+                    // Update progress
+                    processedChunks++;
+                    const progress = Math.round((processedChunks / chunks) * 100);
+                    progressBar.style.width = `${progress}%`;
+                    progressBar.textContent = `${progress}%`;
                     
-                    // Clean up
-                    window.setTimeout(() => {
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                    }, 100);
+                    statusElement.textContent = `Generating ${mbSize}MB random file: ${progress}% complete`;
                     
-                    statusElement.textContent = `${mbSize}MB file successfully generated and download started!`;
-                    statusElement.className = 'status success';
-                } catch (error) {
-                    statusElement.textContent = `Error generating file: ${error.message}`;
-                    statusElement.className = 'status error';
-                    console.error('Error generating random file:', error);
-                } finally {
-                    // Re-enable all buttons
-                    buttons.forEach(button => button.disabled = false);
+                    // Process next chunk (with setTimeout to avoid blocking UI)
+                    setTimeout(processNextChunk, 0);
                 }
-            }, 100); // Small delay to allow UI to update
+                
+                // Start processing chunks
+                processNextChunk();
+                
+            } catch (error) {
+                statusElement.textContent = `Error generating file: ${error.message}`;
+                statusElement.className = 'status error';
+                console.error('Error generating random file:', error);
+                
+                // Re-enable all buttons
+                buttons.forEach(button => button.disabled = false);
+            }
         }
     </script>
 </body>
