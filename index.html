@@ -40,6 +40,12 @@
         .neon-button:hover {
             box-shadow: 0 0 15px #ff00cc;
         }
+        .warning {
+            background: rgba(255, 0, 204, 0.2);
+            border: 1px solid #ff00cc;
+            padding: 8px;
+            border-radius: 4px;
+        }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
@@ -48,11 +54,15 @@
     <div class="holographic-panel p-8 rounded-lg max-w-lg w-full">
         <h1 class="text-3xl font-bold text-center glitch mb-6">CyberReboot</h1>
         <p class="text-sm text-center mb-4 opacity-75">Overload IP cameras to reboot. Use responsibly on your own devices only.</p>
+        <p class="warning text-sm mb-4">Warning: HTTP cameras may be blocked by browsers. Try HTTPS ports or proxy mode.</p>
 
-        <!-- IP Input -->
+        <!-- IP and Port Input -->
         <div class="mb-4">
-            <label class="block text-sm mb-2">Camera Public IP</label>
-            <input id="ip-input" type="text" placeholder="e.g., 203.0.113.1" class="w-full p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc] focus:outline-none">
+            <label class="block text-sm mb-2">Camera Public IP & Port</label>
+            <div class="flex space-x-2">
+                <input id="ip-input" type="text" placeholder="e.g., 203.0.113.1" class="w-2/3 p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc] focus:outline-none">
+                <input id="port-input" type="number" placeholder="Port (e.g., 443)" class="w-1/3 p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc]">
+            </div>
         </div>
 
         <!-- Data Amount Slider -->
@@ -64,13 +74,24 @@
         <!-- Duration Input -->
         <div class="mb-4">
             <label class="block text-sm mb-2">Duration</label>
-            <div class="flex space-x-2">
-                <input id="duration-input" type="number" min="1" value="30" class="w-1/2 p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc]">
-                <select id="duration-unit" class="w-1/2 p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc]">
-                    <option value="seconds">Seconds</option>
-                    <option value="minutes">Minutes</option>
-                </select>
+            <div class=" Ascendantly
+                <div class="flex space-x-2">
+                    <input id="duration-input" type="number" min="1" value="30" class="w-1/2 p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc]">
+                    <select id="duration-unit" class="w-1/2 p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc]">
+                        <option value="seconds">Seconds</option>
+                        <option value="minutes">Minutes</option>
+                    </select>
+                </div>
             </div>
+
+        <!-- Mode Selector -->
+        <div class="mb-4">
+            <label class="block text-sm mb-2">Overload Mode</label>
+            <select id="mode-select" class="w-full p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc]">
+                <option value="https">HTTPS (Try Ports)</option>
+                <option value="proxy">Proxy (HTTP via CORS)</option>
+                <option value="ping">Ping Flood (GET)</option>
+            </select>
         </div>
 
         <!-- Batch Mode -->
@@ -143,10 +164,12 @@
         // Initialize CyberReboot
         const reboot = new CyberReboot({
             ipInput: '#ip-input',
+            portInput: '#port-input',
             dataSlider: '#data-slider',
             dataAmount: '#data-amount',
             durationInput: '#duration-input',
             durationUnit: '#duration-unit',
+            modeSelect: '#mode-select',
             batchSelect: '#batch-select',
             saveIpBtn: '#save-ip',
             startBtn: '#start-btn',
