@@ -47,7 +47,7 @@
     <canvas id="webgl-bg"></canvas>
     <div class="holographic-panel p-8 rounded-lg max-w-lg w-full">
         <h1 class="text-3xl font-bold text-center glitch mb-6">CyberReboot</h1>
-        <p class="text-sm text-center mb-4 opacity-75">Reboot IP cameras by overloading their public IPs. Use responsibly on your own devices.</p>
+        <p class="text-sm text-center mb-4 opacity-75">Overload IP cameras to reboot. Use responsibly on your own devices only.</p>
 
         <!-- IP Input -->
         <div class="mb-4">
@@ -112,6 +112,7 @@
         </div>
     </div>
 
+    <script src="cyber-reboot.js"></script>
     <script>
         // WebGL Background (Holographic Grid)
         const scene = new THREE.Scene();
@@ -139,121 +140,20 @@
         }
         animate();
 
-        // Webapp Logic
-        const workerUrl = 'https://your-worker.workers.dev'; // Replace with your Worker URL
-        let ws = null;
-
-        // Elements
-        const ipInput = document.getElementById('ip-input');
-        const dataSlider = document.getElementById('data-slider');
-        const dataAmount = document.getElementById('data-amount');
-        const durationInput = document.getElementById('duration-input');
-        const durationUnit = document.getElementById('duration-unit');
-        const batchSelect = document.getElementById('batch-select');
-        const saveIpBtn = document.getElementById('save-ip');
-        const startBtn = document.getElementById('start-btn');
-        const stopBtn = document.getElementById('stop-btn');
-        const statusEl = document.getElementById('status');
-        const historyTable = document.getElementById('history-table');
-
-        // Initialize
-        dataSlider.addEventListener('input', () => {
-            dataAmount.textContent = dataSlider.value;
+        // Initialize CyberReboot
+        const reboot = new CyberReboot({
+            ipInput: '#ip-input',
+            dataSlider: '#data-slider',
+            dataAmount: '#data-amount',
+            durationInput: '#duration-input',
+            durationUnit: '#duration-unit',
+            batchSelect: '#batch-select',
+            saveIpBtn: '#save-ip',
+            startBtn: '#start-btn',
+            stopBtn: '#stop-btn',
+            status: '#status',
+            historyTable: '#history-table'
         });
-
-        // Load saved IPs
-        async function loadSavedIps() {
-            const response = await fetch(`${workerUrl}/ips`);
-            const ips = await response.json();
-            batchSelect.innerHTML = '<option value="">Single IP</option>';
-            ips.forEach(ip => {
-                const option = document.createElement('option');
-                option.value = ip;
-                option.textContent = ip;
-                batchSelect.appendChild(option);
-            });
-        }
-        loadSavedIps();
-
-        // Save IP
-        saveIpBtn.addEventListener('click', async () => {
-            const ip = ipInput.value;
-            if (validateIp(ip)) {
-                await fetch(`${workerUrl}/save-ip`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ip })
-                });
-                loadSavedIps();
-                ipInput.value = '';
-            } else {
-                alert('Invalid IP address');
-            }
-        });
-
-        // Start Overload
-        startBtn.addEventListener('click', async () => {
-            const ip = batchSelect.value || ipInput.value;
-            const dataMb = parseInt(dataSlider.value);
-            const duration = parseInt(durationInput.value) * (durationUnit.value === 'minutes' ? 60 : 1);
-            if (!validateIp(ip) && !batchSelect.value) {
-                alert('Invalid IP address');
-                return;
-            }
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            statusEl.textContent = `Status: Sending ${dataMb} MB to ${ip}...`;
-
-            // Start WebSocket for real-time updates
-            ws = new WebSocket(`${workerUrl}/ws`);
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                statusEl.textContent = `Status: ${data.message}`;
-                if (data.history) {
-                    addHistoryRow(data.history);
-                }
-            };
-
-            // Send overload request
-            await fetch(`${workerUrl}/overload`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip, dataMb, duration })
-            });
-        });
-
-        // Stop Overload
-        stopBtn.addEventListener('click', async () => {
-            await fetch(`${workerUrl}/stop`, { method: 'POST' });
-            statusEl.textContent = 'Status: Stopped';
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            if (ws) ws.close();
-        });
-
-        // Load History
-        async function loadHistory() {
-            const response = await fetch(`${workerUrl}/history`);
-            const history = await response.json();
-            history.forEach(addHistoryRow);
-        }
-        loadHistory();
-
-        function addHistoryRow({ ip, dataMb, duration, timestamp }) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="py-1">${ip}</td>
-                <td class="py-1">${dataMb} MB</td>
-                <td class="py-1">${duration}s</td>
-                <td class="py-1">${new Date(timestamp).toLocaleString()}</td>
-            `;
-            historyTable.prepend(row);
-        }
-
-        function validateIp(ip) {
-            const regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-            return regex.test(ip) && !ip.startsWith('192.168.') && !ip.startsWith('10.');
-        }
     </script>
 </body>
 </html>
