@@ -3,186 +3,256 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Random Data File Generator</title>
+    <title>CyberReboot: IP Camera Overloader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
+            background: linear-gradient(135deg, #1a0b2e, #0d1b3d);
+            color: #00ffcc;
+            font-family: 'Orbitron', sans-serif;
+            overflow: hidden;
         }
-        h1 {
-            color: #333;
-            text-align: center;
+        .glitch {
+            animation: glitch 1s linear infinite;
         }
-        .buttons {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-top: 20px;
+        @keyframes glitch {
+            2%, 64% { transform: translate(2px, 0) skew(0deg); }
+            4%, 60% { transform: translate(-2px, 0) skew(0deg); }
+            62% { transform: translate(0, 0) skew(5deg); }
         }
-        button {
-            padding: 10px 15px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #4CAF50;
-            color: white;
+        .holographic-panel {
+            background: rgba(0, 255, 204, 0.1);
+            border: 2px solid #00ffcc;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+        }
+        #webgl-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
+        .neon-button {
+            background: linear-gradient(45deg, #ff00cc, #00ffcc);
             border: none;
-            border-radius: 4px;
-            transition: background-color 0.3s;
+            transition: all 0.3s;
         }
-        button:hover {
-            background-color: #45a049;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        .status {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 4px;
-        }
-        .success {
-            background-color: #dff0d8;
-            color: #3c763d;
-        }
-        .error {
-            background-color: #f2dede;
-            color: #a94442;
-        }
-        .progress-container {
-            width: 100%;
-            background-color: #f1f1f1;
-            border-radius: 4px;
-            margin-top: 10px;
-            display: none;
-        }
-        .progress-bar {
-            height: 20px;
-            background-color: #4CAF50;
-            border-radius: 4px;
-            width: 0%;
-            text-align: center;
-            line-height: 20px;
-            color: white;
+        .neon-button:hover {
+            box-shadow: 0 0 15px #ff00cc;
         }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
-<body>
-    <h1>Random Data File Generator</h1>
-    <p>Click any button below to generate and download a file with random data of the specified size.</p>
+<body class="flex items-center justify-center min-h-screen">
+    <canvas id="webgl-bg"></canvas>
+    <div class="holographic-panel p-8 rounded-lg max-w-lg w-full">
+        <h1 class="text-3xl font-bold text-center glitch mb-6">CyberReboot</h1>
+        <p class="text-sm text-center mb-4 opacity-75">Reboot IP cameras by overloading their public IPs. Use responsibly on your own devices.</p>
 
-    <div class="buttons">
-        <button onclick="startGeneration(1)">Generate 1MB Random File</button>
-        <button onclick="startGeneration(10)">Generate 10MB Random File</button>
-        <button onclick="startGeneration(25)">Generate 25MB Random File</button>
-        <button onclick="startGeneration(50)">Generate 50MB Random File</button>
-        <button onclick="startGeneration(100)">Generate 100MB Random File</button>
-    </div>
+        <!-- IP Input -->
+        <div class="mb-4">
+            <label class="block text-sm mb-2">Camera Public IP</label>
+            <input id="ip-input" type="text" placeholder="e.g., 203.0.113.1" class="w-full p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc] focus:outline-none">
+        </div>
 
-    <div id="status" class="status" style="display: none;"></div>
-    <div id="progress-container" class="progress-container">
-        <div id="progress-bar" class="progress-bar">0%</div>
+        <!-- Data Amount Slider -->
+        <div class="mb-4">
+            <label class="block text-sm mb-2">Data Amount: <span id="data-amount">100</span> MB</label>
+            <input id="data-slider" type="range" min="10" max="5000" value="100" class="w-full">
+        </div>
+
+        <!-- Duration Input -->
+        <div class="mb-4">
+            <label class="block text-sm mb-2">Duration</label>
+            <div class="flex space-x-2">
+                <input id="duration-input" type="number" min="1" value="30" class="w-1/2 p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc]">
+                <select id="duration-unit" class="w-1/2 p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc]">
+                    <option value="seconds">Seconds</option>
+                    <option value="minutes">Minutes</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Batch Mode -->
+        <div class="mb-4">
+            <label class="block text-sm mb-2">Batch Mode (Saved IPs)</label>
+            <select id="batch-select" class="w-full p-2 bg-transparent border border-[#00ffcc] rounded text-[#00ffcc]">
+                <option value="">Single IP</option>
+            </select>
+            <button id="save-ip" class="mt-2 neon-button text-sm px-4 py-2 rounded">Save IP</button>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex space-x-4 mb-4">
+            <button id="start-btn" class="neon-button flex-1 py-2 rounded">Start Overload</button>
+            <button id="stop-btn" class="neon-button flex-1 py-2 rounded opacity-50" disabled>Stop Overload</button>
+        </div>
+
+        <!-- Status -->
+        <div class="mb-4">
+            <p id="status" class="text-sm">Status: Ready</p>
+        </div>
+
+        <!-- History Log -->
+        <div>
+            <h2 class="text-lg font-bold mb-2">Reboot History</h2>
+            <div class="max-h-40 overflow-y-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-[#00ffcc]">
+                            <th class="py-1">IP</th>
+                            <th class="py-1">Data</th>
+                            <th class="py-1">Duration</th>
+                            <th class="py-1">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script>
-        function startGeneration(mbSize) {
-            const statusElement = document.getElementById('status');
-            const progressContainer = document.getElementById('progress-container');
-            const progressBar = document.getElementById('progress-bar');
-            
-            // Update UI
-            statusElement.textContent = `Preparing to generate ${mbSize}MB random file...`;
-            statusElement.className = 'status';
-            statusElement.style.display = 'block';
-            progressContainer.style.display = 'block';
-            progressBar.style.width = '0%';
-            progressBar.textContent = '0%';
-            
-            // Disable all buttons while generating
-            const buttons = document.querySelectorAll('button');
-            buttons.forEach(button => button.disabled = true);
-            
-            // Start the generation process
-            setTimeout(() => {
-                generateRandomFileInChunks(mbSize);
-            }, 100);
+        // WebGL Background (Holographic Grid)
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-bg'), alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        for (let i = 0; i < 1000; i++) {
+            vertices.push(
+                Math.random() * 200 - 100,
+                Math.random() * 200 - 100,
+                Math.random() * 200 - 100
+            );
         }
-        
-        function generateRandomFileInChunks(mbSize) {
-            const statusElement = document.getElementById('status');
-            const progressBar = document.getElementById('progress-bar');
-            const buttons = document.querySelectorAll('button');
-            
-            try {
-                const totalBytes = mbSize * 1024 * 1024;
-                const chunkSize = 65536; // Max size for crypto.getRandomValues() is 65536 bytes
-                const chunks = Math.ceil(totalBytes / chunkSize);
-                let processedChunks = 0;
-                
-                // Create an array to hold all chunks
-                const allChunks = [];
-                
-                function processNextChunk() {
-                    if (processedChunks >= chunks) {
-                        // All chunks processed, combine and download
-                        const blob = new Blob(allChunks, { type: 'application/octet-stream' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${mbSize}mb.bin`;
-                        a.style.display = 'none';
-                        document.body.appendChild(a);
-                        a.click();
-                        
-                        // Clean up
-                        window.setTimeout(() => {
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                        }, 100);
-                        
-                        statusElement.textContent = `${mbSize}MB file successfully generated and download started!`;
-                        statusElement.className = 'status success';
-                        
-                        // Re-enable all buttons
-                        buttons.forEach(button => button.disabled = false);
-                        return;
-                    }
-                    
-                    // Calculate size of this chunk (might be smaller for the last chunk)
-                    const remainingBytes = totalBytes - (processedChunks * chunkSize);
-                    const currentChunkSize = Math.min(chunkSize, remainingBytes);
-                    
-                    // Generate chunk of random data
-                    const buffer = new Uint8Array(currentChunkSize);
-                    window.crypto.getRandomValues(buffer);
-                    allChunks.push(buffer);
-                    
-                    // Update progress
-                    processedChunks++;
-                    const progress = Math.round((processedChunks / chunks) * 100);
-                    progressBar.style.width = `${progress}%`;
-                    progressBar.textContent = `${progress}%`;
-                    
-                    statusElement.textContent = `Generating ${mbSize}MB random file: ${progress}% complete`;
-                    
-                    // Process next chunk (with setTimeout to avoid blocking UI)
-                    setTimeout(processNextChunk, 0);
-                }
-                
-                // Start processing chunks
-                processNextChunk();
-                
-            } catch (error) {
-                statusElement.textContent = `Error generating file: ${error.message}`;
-                statusElement.className = 'status error';
-                console.error('Error generating random file:', error);
-                
-                // Re-enable all buttons
-                buttons.forEach(button => button.disabled = false);
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.PointsMaterial({ color: 0x00ffcc, size: 0.5 });
+        const points = new THREE.Points(geometry, material);
+        scene.add(points);
+        camera.position.z = 100;
+        function animate() {
+            requestAnimationFrame(animate);
+            points.rotation.y += 0.002;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Webapp Logic
+        const workerUrl = 'https://your-worker.workers.dev'; // Replace with your Worker URL
+        let ws = null;
+
+        // Elements
+        const ipInput = document.getElementById('ip-input');
+        const dataSlider = document.getElementById('data-slider');
+        const dataAmount = document.getElementById('data-amount');
+        const durationInput = document.getElementById('duration-input');
+        const durationUnit = document.getElementById('duration-unit');
+        const batchSelect = document.getElementById('batch-select');
+        const saveIpBtn = document.getElementById('save-ip');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const statusEl = document.getElementById('status');
+        const historyTable = document.getElementById('history-table');
+
+        // Initialize
+        dataSlider.addEventListener('input', () => {
+            dataAmount.textContent = dataSlider.value;
+        });
+
+        // Load saved IPs
+        async function loadSavedIps() {
+            const response = await fetch(`${workerUrl}/ips`);
+            const ips = await response.json();
+            batchSelect.innerHTML = '<option value="">Single IP</option>';
+            ips.forEach(ip => {
+                const option = document.createElement('option');
+                option.value = ip;
+                option.textContent = ip;
+                batchSelect.appendChild(option);
+            });
+        }
+        loadSavedIps();
+
+        // Save IP
+        saveIpBtn.addEventListener('click', async () => {
+            const ip = ipInput.value;
+            if (validateIp(ip)) {
+                await fetch(`${workerUrl}/save-ip`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip })
+                });
+                loadSavedIps();
+                ipInput.value = '';
+            } else {
+                alert('Invalid IP address');
             }
+        });
+
+        // Start Overload
+        startBtn.addEventListener('click', async () => {
+            const ip = batchSelect.value || ipInput.value;
+            const dataMb = parseInt(dataSlider.value);
+            const duration = parseInt(durationInput.value) * (durationUnit.value === 'minutes' ? 60 : 1);
+            if (!validateIp(ip) && !batchSelect.value) {
+                alert('Invalid IP address');
+                return;
+            }
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            statusEl.textContent = `Status: Sending ${dataMb} MB to ${ip}...`;
+
+            // Start WebSocket for real-time updates
+            ws = new WebSocket(`${workerUrl}/ws`);
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                statusEl.textContent = `Status: ${data.message}`;
+                if (data.history) {
+                    addHistoryRow(data.history);
+                }
+            };
+
+            // Send overload request
+            await fetch(`${workerUrl}/overload`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, dataMb, duration })
+            });
+        });
+
+        // Stop Overload
+        stopBtn.addEventListener('click', async () => {
+            await fetch(`${workerUrl}/stop`, { method: 'POST' });
+            statusEl.textContent = 'Status: Stopped';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            if (ws) ws.close();
+        });
+
+        // Load History
+        async function loadHistory() {
+            const response = await fetch(`${workerUrl}/history`);
+            const history = await response.json();
+            history.forEach(addHistoryRow);
+        }
+        loadHistory();
+
+        function addHistoryRow({ ip, dataMb, duration, timestamp }) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="py-1">${ip}</td>
+                <td class="py-1">${dataMb} MB</td>
+                <td class="py-1">${duration}s</td>
+                <td class="py-1">${new Date(timestamp).toLocaleString()}</td>
+            `;
+            historyTable.prepend(row);
+        }
+
+        function validateIp(ip) {
+            const regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+            return regex.test(ip) && !ip.startsWith('192.168.') && !ip.startsWith('10.');
         }
     </script>
 </body>
